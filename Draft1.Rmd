@@ -1,0 +1,31 @@
+---
+title: "Justin + Alden"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+## Loading the Data
+
+```{r}
+killings <- read.csv(file="data/PoliceKillingsUS.csv", header=TRUE, sep=",")
+median_household_income <- read.csv(file="data/MedianHouseholdIncome2015.csv",
+                                    header=TRUE, sep=",")
+education_level <- read.csv(file="data/PercentOver25CompletedHighSchool.csv",
+                            header=TRUE, sep=",")
+percent_below_poverty_level <- read.csv(file="data/PercentagePeopleBelowPovertyLevel.csv",
+                                        header=TRUE, sep=",")
+```
+
+## Correlation Analysis
+
+```{r}
+killings_income <- full_join(killings, median_household_income, by = c("city" = "City")) %>%
+  mutate(`Median.Income` = strtoi(`Median.Income`)) %>%
+  filter(`Median.Income` > 0)
+```
+
+
