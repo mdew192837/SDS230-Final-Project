@@ -28,4 +28,16 @@ killings_income <- full_join(killings, median_household_income, by = c("city" = 
   filter(`Median.Income` > 0)
 ```
 
+```{r}
+killings_education <- full_join(killings, education_level, by = c("city" = "City")) %>%
+  mutate(`percent_completed_hs` = as.numeric(`percent_completed_hs`)) %>%
+  filter(`percent_completed_hs` > 0)
+```
+
+```{r}
+killings_poverty <- full_join(killings, percent_below_poverty_level, by = c("city" = "City")) %>%
+  mutate(`poverty_rate` = as.numeric(`poverty_rate`)) %>%
+  filter(`poverty_rate` > 0)
+```
+
 
