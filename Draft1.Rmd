@@ -15,6 +15,7 @@ set.seed(230)
 library(car)
 library(dplyr)
 library(ggplot2)
+library(MASS)
 library(readr)
 ```
 
@@ -27,7 +28,25 @@ world_bank_2016 <- read_csv("Data/WB.2016.csv")
 # wbCor <- wbCor[!is.na(wbCor$GNI),]
 ```
 
+```{r, include = FALSE}
+myResPlots2 <- function(model, label = "Residual Plots"){
+  
+  #Normal quantile plot of studentized residuals
+  qqPlot(rstudent(model), pch=19, main=paste("NQ Plot of Studentized Residuals,",label))
+  
+  #plot of fitted vs. studentized residuals
+  plot(rstudent(model) ~ model$fitted.values, pch=19, col='red', xlab="Fitted Values", ylab = "Studentized Residuals",
+     main = paste("Fits vs. Studentized Residuals,", label))
+  abline(h=0, lwd=3)
+  abline(h=c(3,-3), lty=2, col="blue")
+  abline(h=c(2,-2), lty=2, col="green")
+}
+```
+
+
 ## Correlation Analysis
+
+TODO Should I check all variable things now? I could do that with a boxplot. Or is the way I did it with the plotting the two values and seeing the clump ok?
 
 First, we would like to see whether global health indicators are associated with economic indicators such as GNI or percent of the population in rural areas.
 
@@ -35,7 +54,7 @@ We acknowledge that environment indicators such as PM2.5, ...., <fill in> may ca
 
 ```{r}
 health_indicators <- world_bank_2016 %>%
-  select(GNI, Rural, Measles, InfMort, LifeExp) %>%
+  dplyr::select(GNI, Rural, Measles, InfMort, LifeExp) %>%
   mutate(logGNI = log10(GNI)) %>%
   na.omit()
 ```
@@ -118,21 +137,21 @@ TODO: Should we do a bootstrap confidence interval here, or should we do that so
 ## Linear Model
 
 ```{r}
-pred_GNI_all <- lm(logGNI ~ Measles + InfMort + LifeExp, data = health_indicators)
-summary(pred_GNI_all)
+GNI_all.model <- lm(logGNI ~ Measles + InfMort + LifeExp, data = health_indicators)
+summary(GNI_all.model)
 ```
 
 It appears that measles and infant mortality are not significant, while LifeExp is. This might be due to a high level of multicollinearity amongst the variables. Specifically, measles likely affects infant mortality, which likely affects life expectancy. We can check this by running a few tests.
 
 ```{r}
-vif(pred_GNI_all)
+vif(GNI_all.model)
 ```
 
 Since we have a high degree of multicollinearity supported by the variability inflated factor of > 5 for both infant mortality and life expectancy.
 
 ```{r}
-pred_GNI_LifeExp <- lm(logGNI ~ LifeExp, data = health_indicators)
-summary(pred_GNI_LifeExp)
+GNI_LifeExp.model <- lm(logGNI ~ LifeExp, data = health_indicators)
+summary(GNI_LifeExp.model)
 ```
 
 In fact, the `R^2` for the model containing all three variables is lower than the `R^2` for the model containing just `LifeExp`.
@@ -140,4 +159,83 @@ In fact, the `R^2` for the model containing all three variables is lower than th
 Let us examine how measles is related to infant mortality, and how infant mortality is related to life expectancy... TODO -> should we pursue this more?
 
 Degree of multicollinearity... in regression model
+
+```{r}
+cor(health_indicators[, c("Measles", "LifeExp", "InfMort")])
+```
+
+So this shows that "LifeExp" and "InfMort" are highly correlated -> high degree of multicollinearity. Take one out is the best option.
+
+## Stepwise (Backwards and Forwards selection model)
+
+Now that we know that GNI is an economic indicator that is relatively correlated with Life Expectancy, we can see how the various environmental factors can predict life expectancy.
+
+To do this, we will use both a forwards and backwards selection model, using the `MASS` package.
+
+```{r}
+# Get environmental indicators
+environmental_indicators <- world_bank_2016 %>%
+  dplyr::select(LifeExp, PM2.5, Diesel, EnergyUse, FossilPct, Forest14, Forest94, CO2) %>%
+  na.omit()
+
+# Fit the full model
+full_environmental.model <- lm(LifeExp ~ ., data = environmental_indicators)
+summary(full_environmental.model)
+
+# Stepwise regression model
+step_backwards.model <- stepAIC(full_environmental.model, direction = "backward", 
+                      trace = FALSE)
+summary(step_backwards.model)
+
+# Stepwise regression model
+step_forwards.model <- stepAIC(full_environmental.model, direction = "forward", 
+                      trace = FALSE)
+summary(step_backwards.model)
+```
+
+## Logistic Regression
+
+Let us try to see if there is an association between rural areas and the environmental factors.
+
+In other words, we are interested in whether we are able to predict whether a country is undeveloped or developed based on environmental factors. Some people believe that more developed countries have worse environment conditions. Some people believe that less developed countries have worse environment conditions.
+
+TODO: This doesn't really seem to work, not enough rural countries here
+
+```{r}
+rural_data <- world_bank_2016 %>%
+  dplyr::select(Rural, PM2.5, Diesel, EnergyUse, FossilPct, Forest14, Forest94, CO2) %>%
+  mutate(isRural = Rural < 0.20) %>%
+  mutate(isRural = as.integer(isRural)) %>%
+  mutate(isRural = factor(as.character(isRural, levels = c("Not Rural", "Rural")))) %>%
+  na.omit()
+
+# visualize the data
+rural_data  %>% 
+  ggplot(aes(x = PM2.5, y = isRural)) + 
+  geom_jitter(alpha = .1, position = position_jitter(height = .2)) + 
+  xlab("Price ($)") + 
+  ylab ("New or used")
+```
+
+Developed vs. Less Developed Countries
+
+Splitting income based on https://blogs.worldbank.org/opendata/new-country-classifications-2016.
+
+```{r}
+GNI_data <- world_bank_2016 %>%
+  dplyr::select(GNI, PM2.5, Diesel, EnergyUse, FossilPct, Forest14, Forest94, CO2) %>%
+  mutate(isDeveloped = GNI >= 12476) %>%
+  mutate(isDeveloped = as.integer(isDeveloped)) %>%
+  mutate(isDeveloped = factor(as.character(isDeveloped, levels = c("Low-Medium Income", "High-Income")))) %>%
+  na.omit()
+
+# visualize the data
+GNI_data  %>% 
+  ggplot(aes(x = PM2.5, y = isDeveloped)) + 
+  geom_jitter(alpha = .1, position = position_jitter(height = .2)) + 
+  xlab("PM2.5 Levels") + 
+  ylab ("Developed Country")
+```
+
+No significant difference here. Don't think I can get a good prediction
 
