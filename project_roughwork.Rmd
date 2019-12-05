@@ -1,0 +1,42 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r correlation}
+
+all_data <- read.csv("WB.2016.csv")
+
+test <- all_data %>%
+  select(PM2.5, Rural, Exports, InfMort, LifeExp) %>%
+  na.omit()
+
+cor(test$Exports, test$LifeExp)
+
+```
+
+```{r hypo test w 2 means}
+
+more_developed <- all_data[all_data$Rural <= 40, ]
+less_developed <- all_data[all_data$Rural > 40, ]
+
+mean(less_developed$PM2.5, na.rm = TRUE)
+mean(more_developed$PM2.5, na.rm = TRUE)
+
+```
+
+```{r linear models}
+
+# 
+test2 <- all_data %>%
+  select(PM2.5, Rural, GNI, Exports, Imports, InfMort, LifeExp, Measles) %>%
+  na.omit()
+
+lm_fit <- lm(LifeExp ~ GNI + Exports + Imports + PM2.5 + Rural + Measles, test2)
+summary(lm_fit)
+
+
+
+```
+
+$\\$

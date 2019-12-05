@@ -10,34 +10,134 @@ library(dplyr)
 
 ## Loading the Data
 
-```{r}
-killings <- read.csv(file="data/PoliceKillingsUS.csv", header=TRUE, sep=",")
-median_household_income <- read.csv(file="data/MedianHouseholdIncome2015.csv",
-                                    header=TRUE, sep=",")
-education_level <- read.csv(file="data/PercentOver25CompletedHighSchool.csv",
-                            header=TRUE, sep=",")
-percent_below_poverty_level <- read.csv(file="data/PercentagePeopleBelowPovertyLevel.csv",
-                                        header=TRUE, sep=",")
+```{r, include = FALSE}
+set.seed(230)
+library(car)
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+```{r, include = FALSE}
+#read in data
+world_bank_2016 <- read_csv("Data/WB.2016.csv")
+
+# remove NA data for measles and GNI
+# wbCor <- wb[!is.na(wb$Measles),]
+# wbCor <- wbCor[!is.na(wbCor$GNI),]
 ```
 
 ## Correlation Analysis
 
-```{r}
-killings_income <- full_join(killings, median_household_income, by = c("city" = "City")) %>%
-  mutate(`Median.Income` = strtoi(`Median.Income`)) %>%
-  filter(`Median.Income` > 0)
-```
+First, we would like to see whether global health indicators are associated with economic indicators such as GNI or percent of the population in rural areas.
+
+We acknowledge that environment indicators such as PM2.5, ...., <fill in> may cause a degree of omitted variable bias, but we believe that ... <insert reason why only looking at health indicators.
 
 ```{r}
-killings_education <- full_join(killings, education_level, by = c("city" = "City")) %>%
-  mutate(`percent_completed_hs` = as.numeric(`percent_completed_hs`)) %>%
-  filter(`percent_completed_hs` > 0)
+health_indicators <- world_bank_2016 %>%
+  select(GNI, Rural, Measles, InfMort, LifeExp) %>%
+  mutate(logGNI = log10(GNI)) %>%
+  na.omit()
 ```
+
+First, to test whether our hypothesis that GNI and Rural are good indicators of economic development....
+
+TODO: Fix plot labels, etc.
 
 ```{r}
-killings_poverty <- full_join(killings, percent_below_poverty_level, by = c("city" = "City")) %>%
-  mutate(`poverty_rate` = as.numeric(`poverty_rate`)) %>%
-  filter(`poverty_rate` > 0)
+ggplot(data = health_indicators, aes(x = GNI, y = Rural)) +
+  geom_point() +
+  ggtitle("% Rural Population vs. GNI")
 ```
 
+We see that they appear to be correlated, but not in a linear relationship. It appears that most countries have GNIs between 0 and 20000, which may violate a homoscedasticity assumption when running a correlation. Thus, in an effort to get to a more linear form, we transform GNI to logGNI.
+
+```{r}
+ggplot(data = health_indicators, aes(x = logGNI, y = Rural)) +
+  geom_point() +
+  ggtitle("% Rural Population vs. logGNI")
+```
+
+This looks much more linear! TODO: Check the other linear assumptions.
+
+### 1. Hypotheses
+
+TODO: In the hypothesis, should this be GNI or logGNI?
+
+Null Hypothesis: There is no correlation between the percentage of a country living in a rural area and the GNI of a country. That is, the correlation equals 0.
+
+Alternative Hypothesis: There is a correlation between the percentage of a country living in a rural area and the GNI of a country. That is, the correlation does not equal 0.
+
+$$H_0: \rho = 0$$
+
+$$H_a: \rho \neq 0$$
+
+### 2. Observed Statistic
+
+```{r}
+(obs_stat_corr_rural_logGNI <- cor(health_indicators$Rural, health_indicators$logGNI))
+```
+
+### 3. Create null distribution
+
+```{r}
+null_dist_corr_rural_logGNI <- rep(NA, 10000)
+for (i in 1:10000){
+  null_dist_corr_rural_logGNI[i] <-
+    cor(sample(health_indicators$Rural), health_indicators$logGNI)
+}
+
+# plot the null distribution with a red vertical line for the statistic value
+hist(null_dist_corr_rural_logGNI,
+     main = "Null Distribution of Correlation between % Population Rural and logGNI",
+     xlab = "Correlation",
+     xlim = c(-0.8, 0.8),
+     nclass = 50)
+
+# So far off that it doesn't even matter
+abline(v = obs_stat_corr_rural_logGNI, col = "red")
+```
+
+### 4. Calculate p-value
+
+```{r}
+(p_value_corr_rural_logGNI <-
+   sum(abs(null_dist_corr_rural_logGNI) >= abs(obs_stat_corr_rural_logGNI)) / length(null_dist_corr_rural_logGNI))
+```
+
+### 5. Conclusion
+
+TODO: Same here, logGNI or just GNI.
+
+A p-value of 0 is not consistent with there being no correlation between percentage of the population living in rural areas and the GNI. Our null is that the correlation coefficient is 0, so a p-value of 0 means that assuming the null is true, there is a 0% chance that we would observe a correlation coefficient statistic as extreme as ours (-0.7127915).
+
+Thus, we see that GNI and percentage of rural population are quite correlated with each other, and thus can proceed with analyses of either one in our search for a model that predicts economic development (we will use both).
+
+TODO: Should we do a bootstrap confidence interval here, or should we do that somewhere else?
+
+## Linear Model
+
+```{r}
+pred_GNI_all <- lm(logGNI ~ Measles + InfMort + LifeExp, data = health_indicators)
+summary(pred_GNI_all)
+```
+
+It appears that measles and infant mortality are not significant, while LifeExp is. This might be due to a high level of multicollinearity amongst the variables. Specifically, measles likely affects infant mortality, which likely affects life expectancy. We can check this by running a few tests.
+
+```{r}
+vif(pred_GNI_all)
+```
+
+Since we have a high degree of multicollinearity supported by the variability inflated factor of > 5 for both infant mortality and life expectancy.
+
+```{r}
+pred_GNI_LifeExp <- lm(logGNI ~ LifeExp, data = health_indicators)
+summary(pred_GNI_LifeExp)
+```
+
+In fact, the `R^2` for the model containing all three variables is lower than the `R^2` for the model containing just `LifeExp`.
+
+Let us examine how measles is related to infant mortality, and how infant mortality is related to life expectancy... TODO -> should we pursue this more?
+
+Degree of multicollinearity... in regression model
 
