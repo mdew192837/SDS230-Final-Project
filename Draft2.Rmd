@@ -222,6 +222,11 @@ combined_indicators <- world_bank_2016 %>%
   mutate(logGNI = log10(GNI)) %>%
   na.omit()
 
+# Drop GNI
+combined_indicators <- combined_indicators %>%
+  dplyr::select(-GNI) %>%
+  na.omit()
+
 combined_all.model <- lm(logGNI ~ ., data = combined_indicators)
 summary(combined_all.model)
 ```
@@ -231,3 +236,85 @@ Our baseline model with all of the indicators described above results in an `R-s
 However, as discussed in the course, we should also look for relationships that are not linear, as correlations do not have to be linear. While doing this, we should also take care to not overfit to the data we have, as our ultimate goal is to have strong predicting power.
 
 Thus, we will conduct a model selection analysis that uses the `AIC`, `BIC`, `Adjusted R^2`, and `cross-validation` techniques to find the best predictive model!
+
+```{r}
+all_r_squared <- NULL
+all_adj_r_squared <- NULL
+all_aic <- NULL
+all_bic <- NULL
+
+# create a for loop to extract the relevant statistics 
+for (i in 1:5) {
+  current_model_fit <- lm(logGNI ~ polym(LifeExp, PM2.5, Diesel, EnergyUse, FossilPct, Measles, InfMort, Rural, degree = i), data = combined_indicators)
+  current_model_summary <- summary(current_model_fit)
+  all_r_squared[i] <- current_model_summary$r.squared
+  all_adj_r_squared[i] <- current_model_summary$adj.r.squared
+  all_aic[i] <- AIC(current_model_fit)
+  all_bic[i] <- BIC(current_model_fit)
+}
+
+# print the degree selected by each model selection method using
+# the which.max() or which.min() functions
+which.max(all_r_squared)
+which.max(all_adj_r_squared)
+which.min(all_aic)
+which.min(all_bic)
+```
+
+And as our last metric, we should look at the cross validation method!
+
+```{r}
+# create the training set and the test set
+total_num_points <- dim(combined_indicators)[1]
+num_training_points <- floor(total_num_points/2)
+
+training_data <- combined_indicators[1:num_training_points, ]
+test_data <- combined_indicators[(num_training_points + 1):total_num_points, ]
+
+# run a for loop to calculate the MSPE for models of degree 1 to 5 
+all_mspe <- NULL
+# then find the model with the minimal MSPE
+for (i in 1:5) {
+  print(i)
+  current_model_fit <- lm(logGNI ~ poly(LifeExp, PM2.5, Diesel, EnergyUse, FossilPct, Measles, InfMort, Rural, degree = i), data = combined_indicators)
+  current_model_predictions <- predict(current_model_fit, newdata = test_data)
+  all_mspe[i] <- mean((current_model_predictions - test_data$logGNI)^2)
+}
+
+which.min(all_mspe)
+```
+
+Thus, our table looks like:
+
+|             |    1    |    2    |    3    |    4    |    5    |
+|-------------|---------|---------|---------|---------|---------|
+| $R^2$       |         |         |    x    |         |         |
+| $R^2_{adj}$ |         |    x    |         |         |         |
+|  AIC        |         |         |    x    |         |         |
+|  BIC        |         |         |    x    |         |         |
+|  cross-val  |         |         |    x    |         |         |
+
+Thus, it seems like a polynomial model with degree 3 works the best!
+
+
+Let's see how this model performs on all the data!
+
+```{r}
+# Degree 3 was shown to be most effective
+final_combined.model <- lm(logGNI ~ poly(LifeExp, PM2.5, Diesel, EnergyUse, FossilPct, Measles, InfMort, Rural, degree = 2), data = combined_indicators)
+
+# Stepwise regression model
+final_step_backwards.model <- stepAIC(final_combined.model, direction = "backward", 
+                      trace = FALSE)
+summary(final_step_backwards.model)
+
+# Stepwise regression model
+final_step_forwards.model <- stepAIC(final_combined.model, direction = "forward", 
+                      trace = FALSE)
+summary(final_step_forwards.model)
+```
+
+Note that our model seems to be quite good at prediction but we acknowledge the following:
+
+- We are using a large amount of variables relative to how much data we have.
+- Our model is not very interpretable due to the presence of many predictors. However, we believe that as the goal of this model is to maximize prediction power, this is ok. This is why we began our analyses with the different types of indicators to make the model more interpretable, that is, first looking at significant health indicators, then at significant environmental indicators, and then combining the model.
