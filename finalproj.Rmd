@@ -333,6 +333,12 @@ Build linear models, run hypothesis tests, create confidence intervals and/or ru
 1-2 paragraphs summarizing what you found, how the findings address your question of interest, and possible future directions. Please make sure describe your conclusions in an intuitive way, and make sure that your argument is strong and backed by solid evidence from your data. 
 -->
 
+Overall, we found that both the `Rural` (percentage of rural population in a country) and `FossilPct` (percentage of fossil fuel consumption out of total energy consumption) were associated with `GNI`. Using an `ANOVA` test, we found a statistically significant difference in mean fossil fuel energy consumption between the different development levels.
+
+Our prediction model developed to predict `logGNI` achieved an `R^2` of 0.876 and an `adj. R^2` of 0.867.
+
+This topic is interesting because it has a multitude of potential policy applications. Policymakers in countries can make use of such a model to identify possible reasons for the level of economic performance of the country, and deduce ways to improve or further strengthen their economic situation.
+
 ### Future Directions
 
 ## Reflection
@@ -353,3 +359,5 @@ $\\$
 <!--  
 You can include a complete listing of your code here if you could not fit it into the body of the document. Make sure your code is well commmented and easy to create - i.e., use meaningful object names, separate your code into sections, describe what each section is doing, etc. 
 -->
+
+Data obtained from the [WorldBank](http://wdi.worldbank.org/tables). Variable descriptions can be found [here](https://drive.google.com/file/d/1COq7zljHEhnNcfJakuvbE2XmSAIafWq5/view?usp=sharing).
